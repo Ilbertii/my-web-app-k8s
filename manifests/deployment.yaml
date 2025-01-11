@@ -1,0 +1,114 @@
+# Deployment: основное описание приложения
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-web-app
+  labels:
+    app: my-web-app
+spec:
+  replicas: 2 # Начальное количество реплик. HPA автоматически увеличит или уменьшит это значение.
+  selector:
+    matchLabels:
+      app: my-web-app
+  template:
+    metadata:
+      labels:
+        app: my-web-app
+    spec:
+      # Affinity: Гарантируем распределение подов по зонам для повышения отказоустойчивости.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - my-web-app
+              topologyKey: topology.kubernetes.io/zone # Учитываем зоны, чтобы поды не запускались в одной зоне.
+      topologySpreadConstraints:
+        - maxSkew: 1 # Не более чем на 1 под разница между зонами.
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule # Не допускаем размещения всех подов в одной зоне.
+          labelSelector:
+            matchLabels:
+              app: my-web-app
+      containers:
+        - name: my-web-app
+          image: your-image:latest # Замените на ваш образ.
+          ports:
+            - containerPort: 8080 # Порт приложения.
+          # Устанавливаем ресурсы:
+          # - CPU requests: 0.1, так как приложение стабильно использует 0.1 CPU.
+          # - CPU limits: 1.0, чтобы учесть пиковое потребление на старте.
+          # - Memory: запросы и лимиты близки, так как потребление памяти стабильно.
+          resources:
+            requests:
+              cpu: "0.1"
+              memory: "128Mi"
+            limits:
+              cpu: "1.0"
+              memory: "256Mi"
+          # LivenessProbe: Проверка здоровья контейнера, чтобы перезапускать его в случае сбоев.
+          livenessProbe:
+            httpGet:
+              path: /healthz # Endpoint для проверки здоровья.
+              port: 8080
+            initialDelaySeconds: 10 # Задержка перед первой проверкой (учитывает инициализацию приложения).
+            periodSeconds: 10 # Частота проверок.
+            failureThreshold: 3 # Количество ошибок перед перезапуском.
+          # ReadinessProbe: Проверка готовности контейнера к обработке трафика.
+          readinessProbe:
+            httpGet:
+              path: /readyz # Endpoint для проверки готовности.
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+---
+# HPA: автоматическое горизонтальное масштабирование.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-web-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-web-app
+  minReplicas: 2 # Минимальное количество подов (гарантия базовой доступности).
+  maxReplicas: 6 # Максимальное количество подов для пиковых нагрузок.
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70 # Поды масштабируются при загрузке CPU более 70%.
+  # Поведение HPA:
+  # - Защита от резких скачков через stabilizationWindowSeconds.
+  # - Масштабируем поды максимум на 50% за один шаг.
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+---
+# PodDisruptionBudget (PDB): минимальное количество работающих подов.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-web-app-pdb
+spec:
+  minAvailable: 2 # Гарантия, что минимум 2 пода будут работать.
+selector:
+    matchLabels:
+      app: my-web-app

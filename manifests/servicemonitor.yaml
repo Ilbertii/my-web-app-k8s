@@ -1,0 +1,12 @@
+# ServiceMonitor: интеграция с Prometheus для сбора метрик (если используется Prometheus Operator).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-web-app-monitor
+spec:
+  selector:
+    matchLabels:
+      app: my-web-app
+  endpoints:
+    - port: metrics # Метрики будут доступны на порту 8080.
+      interval: 30s # Частота сбора метрик.

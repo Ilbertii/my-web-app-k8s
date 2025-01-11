@@ -1,0 +1,8 @@
+# ConfigMap: конфигурация приложения (опционально).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-web-app-config
+data:
+  APP_ENV: "production" # Пример переменной окружения.
+  LOG_LEVEL: "info" # Пример уровня логирования.

@@ -1,0 +1,19 @@
+# NetworkPolicy: ограничение сетевого доступа.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-traffic
+spec:
+  podSelector:
+    matchLabels:
+      app: my-web-app
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend # Укажите label вашего фронтенда.
+      ports:
+        - protocol: TCP
+          port: 8080 # Пропускаем только трафик на порт 8080.
+  policyTypes:
+    - Ingress
